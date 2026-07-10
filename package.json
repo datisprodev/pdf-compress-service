@@ -1,0 +1,10 @@
+{
+  "name": "pdf-compress-service",
+  "version": "1.0.0",
+  "description": "Serviço de compressão de PDF com Ghostscript para o Datisprev",
+  "main": "index.js",
+  "dependencies": {
+    "express": "^4.19.2",
+    "firebase-admin": "^12.0.0"
+  }
+}
