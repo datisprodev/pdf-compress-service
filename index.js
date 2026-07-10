@@ -5,6 +5,8 @@ const { execSync } = require('child_process');
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const app = express();
 app.use(express.json());
@@ -42,6 +44,69 @@ app.post('/compress', async (req, res) => {
   } catch (err) {
     console.error('Erro ao comprimir:', err);
     return res.status(500).json({ error: 'Erro interno ao comprimir PDF.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// ROTA: POST /compress-upload
+// Recebe o PDF bruto (multipart), comprime e devolve o binário.
+// Usado pelo frontend ANTES de salvar no Storage (PDFs < 10MB).
+// ─────────────────────────────────────────────────────────────
+app.post('/compress-upload', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+  }
+
+  const tempDir = os.tmpdir();
+  const ts = Date.now();
+  const inputPath = path.join(tempDir, `in_${ts}.pdf`);
+  const outputPath = path.join(tempDir, `out_${ts}.pdf`);
+
+  try {
+    fs.writeFileSync(inputPath, req.file.buffer);
+    const tamanhoOriginal = req.file.buffer.length;
+
+    const cmd = [
+      'gs',
+      '-sDEVICE=pdfwrite',
+      '-dCompatibilityLevel=1.4',
+      '-dPDFSETTINGS=/ebook',
+      '-dNOPAUSE',
+      '-dQUIET',
+      '-dBATCH',
+      `-sOutputFile=${outputPath}`,
+      inputPath,
+    ].join(' ');
+
+    let bufferFinal = req.file.buffer;
+    let comprimido = false;
+    let reducaoPercent = 0;
+
+    try {
+      execSync(cmd, { timeout: 120000 });
+      const tamanhoFinal = fs.statSync(outputPath).size;
+
+      if (tamanhoFinal < tamanhoOriginal) {
+        bufferFinal = fs.readFileSync(outputPath);
+        comprimido = true;
+        reducaoPercent = Math.round(((tamanhoOriginal - tamanhoFinal) / tamanhoOriginal) * 100);
+      }
+    } catch (e) {
+      console.warn('Ghostscript falhou, retornando original:', e.message);
+    }
+
+    res.set('Content-Type', 'application/pdf');
+    res.set('X-Comprimido', String(comprimido));
+    res.set('X-Reducao-Percent', String(reducaoPercent));
+    res.set('X-Tamanho-Original', String(tamanhoOriginal));
+    return res.send(bufferFinal);
+
+  } catch (err) {
+    console.error('Erro em /compress-upload:', err);
+    return res.status(500).json({ error: 'Erro interno ao comprimir PDF.' });
+  } finally {
+    if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+    if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
   }
 });
 
