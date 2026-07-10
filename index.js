@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getStorage } = require('firebase-admin/storage');
 const { execSync } = require('child_process');
@@ -9,6 +10,7 @@ const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 // Inicializa Firebase Admin com a conta de serviço padrão do Cloud Run
